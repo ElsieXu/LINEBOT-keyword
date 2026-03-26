@@ -131,7 +131,7 @@ def webhook():
             user_text = event["message"]["text"]
             reply_token = event["replyToken"]
 
-            # 🟢 ① /search 功能
+            # 🟢 ① /search
             if user_text.startswith("/search"):
                 keyword = user_text.replace("/search", "").strip()
 
@@ -143,17 +143,31 @@ def webhook():
                     reply = f"找到 {len(results)} 筆：\n\n"
 
                     for i, item in enumerate(results[:5]):
-                        reply += f"{i+1}️⃣ {item['title']}\n"
+                        reply += f"""{i+1}️⃣ {item['title']}
+🔗 {item['url']}
+
+"""
 
                 reply_message(reply_token, reply)
                 continue
 
-            # 🟡 ② 網址處理
+            # 🟣 ② /edit
+            elif user_text.startswith("/edit"):
+                new_keywords = user_text.replace("/edit", "").strip()
+
+                success = update_latest_keywords(user_id, new_keywords)
+
+                if success:
+                    reply = f"已更新關鍵字為：{new_keywords} ✅"
+                else:
+                    reply = "更新失敗（可能還沒有資料）😢"
+
+                reply_message(reply_token, reply)
+                continue
+
+            # 🟡 ③ 網址處理
             elif user_text.startswith("http"):
                 url = user_text
-
-                # 先回，避免 timeout
-                reply_message(reply_token, "已收到，分析中 🔄")
 
                 try:
                     title, content = get_web_content(url)
@@ -161,12 +175,26 @@ def webhook():
 
                     save_to_supabase(user_id, url, title, keywords)
 
+                    reply = f"""已幫你收藏 ✅
+
+🔗 連結：
+{url}
+
+📄 標題：
+{title}
+
+🏷 關鍵字：
+{keywords}
+"""
+
                 except Exception as e:
                     print("❌ 分析錯誤:", e)
+                    reply = "分析失敗，請稍後再試 😢"
 
+                reply_message(reply_token, reply)
                 continue
 
-            # 🔴 ③ 其他輸入
+            # 🔴 ④ 其他
             else:
                 reply_message(
                     reply_token,
@@ -201,6 +229,36 @@ def save_to_supabase(user_id, url, title, keywords):
 
     except Exception as e:
         print("❌ INSERT 失敗:", str(e))
+
+def update_latest_keywords(user_id, new_keywords):
+    try:
+        # 先抓最新一筆
+        res = supabase.table("bookmarks") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .order("created_at", desc=True) \
+            .limit(1) \
+            .execute()
+
+        if len(res.data) == 0:
+            return False
+
+        latest_id = res.data[0]["id"]
+
+        keywords_list = [k.strip() for k in new_keywords.split(",")]
+
+        # 更新
+        supabase.table("bookmarks") \
+            .update({"keywords": keywords_list}) \
+            .eq("id", latest_id) \
+            .execute()
+
+        return True
+
+    except Exception as e:
+        print("❌ UPDATE ERROR:", e)
+        return False
+
 
 def search_bookmarks(user_id, keyword):
     try:
