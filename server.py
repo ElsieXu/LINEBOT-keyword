@@ -62,6 +62,17 @@ def extract_og_data(url):
         return None
 
 def extract_content(url):
+
+    # 🔥 0️⃣ FB / IG 先攔截（最重要）
+    if "facebook.com" in url or "fb.watch" in url or "instagram.com" in url:
+        return {
+            "title": "社群貼文",
+            "content": url,
+            "type": "social",
+            "url": url,
+            "source": "fallback"
+        }
+
     # 1️⃣ OG 優先
     og_data = extract_og_data(url)
     if og_data:
@@ -101,6 +112,7 @@ def extract_content(url):
         "url": url,
         "source": "ai_only"
     }
+
 def get_web_content(url):
     try:
         res = requests.get(url, timeout=5)
@@ -195,7 +207,6 @@ def reply_message(reply_token, text):
     print("👉 LINE status:", res.status_code)
     print("👉 LINE response:", res.text)
 
-
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
@@ -252,34 +263,25 @@ def webhook():
 
                 try:
                     data = extract_content(url)
-                    
+
                     title = data.get("title") or ""
                     content = data.get("content") or ""
                     content_type = data.get("type") or ""
                     final_url = data.get("url") or url
-                    source = data.get("source") or "unknown"
 
-                    keywords = get_keywords(title, content, content_type)
+                    # 🔥 關鍵：加入 user_text
+                    keywords = get_keywords(title, content + "\n" + user_text, content_type)
 
                     save_to_supabase(user_id, final_url, title, keywords)
 
-                    if not title:
-                        title = ""
-
-                    reply = f"""已幫你收藏 ✅
-
-                    🔗 連結：
-                    {final_url}
-                    📄 標題：
-                    {title}
-
-                    🏷 關鍵字：
-                    {keywords}
-                    """
+                    reply = f"""已收藏 ✅
+🔗 {final_url}
+📄 {title}
+🏷 {keywords}
+"""
 
                 except Exception as e:
                     print("❌ 分析錯誤:", e)
-
                     import traceback
                     traceback.print_exc()
 
@@ -300,7 +302,10 @@ def webhook():
 
     except Exception as e:
         print("❌ webhook錯誤:", str(e))
+        import traceback
+        traceback.print_exc()
         return "OK", 200
+
 
 def save_to_supabase(user_id, url, title, keywords):
     try:
