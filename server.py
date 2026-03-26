@@ -309,7 +309,16 @@ def webhook():
 
 def save_to_supabase(user_id, url, title, keywords):
     try:
-        keywords_list = [k.strip() for k in keywords.split(",")]
+        print("🟡 準備寫入 Supabase")
+
+        # 🔥 關鍵：處理 Gemini 回傳格式
+        keywords_list = [
+            k.strip()
+            for k in keywords.replace("\n", ",").split(",")
+            if k.strip()
+        ]
+
+        print("👉 keywords_list:", keywords_list)
 
         res = supabase.table("bookmarks").insert({
             "user_id": user_id,
@@ -324,7 +333,10 @@ def save_to_supabase(user_id, url, title, keywords):
         print("✅ INSERT 成功:", res)
 
     except Exception as e:
-        print("❌ INSERT 失敗:", str(e))
+        print("❌ INSERT 失敗:", e)
+
+        import traceback
+        traceback.print_exc()
 
 def update_latest_keywords(user_id, new_keywords):
     try:
