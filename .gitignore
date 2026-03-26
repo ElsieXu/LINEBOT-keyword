@@ -1,0 +1,15 @@
+# 1. 敏感資訊 (最重要！)
+.env
+
+# 2. Python 自動產生的快取檔案 (避免亂碼檔案上傳)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 3. 虛擬環境 (如果你本地有建立 venv 資料夾，不需要傳上去)
+venv/
+env/
+
+# 4. 作業系統產生的雜物
+.DS_Store
+Thumbs.db
