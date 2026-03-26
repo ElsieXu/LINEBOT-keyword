@@ -22,10 +22,10 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # ✅ debug
 print("🔥程式啟動了")
-print("🔥TOKEN實際值:", LINE_TOKEN[:20], "...")
-print("🔥GEMINI KEY:", GEMINI_API_KEY)
-print("URL:", os.getenv("SUPABASE_URL"))
-print("KEY:", os.getenv("SUPABASE_ANON_KEY"))
+print("LINE TOKEN 是否存在:", bool(LINE_TOKEN))
+print("GEMINI KEY 是否存在:", bool(GEMINI_API_KEY))
+print("SUPABASE URL 是否存在:", bool(os.getenv("SUPABASE_URL")))
+print("SUPABASE KEY 是否存在:", bool(os.getenv("SUPABASE_ANON_KEY")))
 
 app = Flask(__name__)
 
@@ -251,14 +251,13 @@ def webhook():
                 url = user_text
 
                 try:
-                    title, content, content_type, final_url, 
                     data = extract_content(url)
-
-                    title = data["title"]
-                    content = data["content"]
-                    content_type = data["type"]
-                    final_url = data["url"]
-                    source = data["source"]
+                    
+                    title = data.get("title") or ""
+                    content = data.get("content") or ""
+                    content_type = data.get("type") or ""
+                    final_url = data.get("url") or url
+                    source = data.get("source") or "unknown"
 
                     keywords = get_keywords(title, content, content_type)
 
@@ -280,6 +279,10 @@ def webhook():
 
                 except Exception as e:
                     print("❌ 分析錯誤:", e)
+
+                    import traceback
+                    traceback.print_exc()
+
                     reply = "分析失敗，請稍後再試 😢"
 
                 reply_message(reply_token, reply)
