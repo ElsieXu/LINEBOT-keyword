@@ -17,7 +17,7 @@ supabase = create_client(
 load_dotenv()
 
 # ✅ 再取得變數
-LINE_TOKEN = "x4cfjPpz1m5HaHAHLYvMtl/bQxIybp+qwRQC3lSsGF/A189cGoBF8lIlmUwxt+4EaV1/HbrXKh2Fl946aziLE+Tnmw2RZOnRGRQY1/U4XLLMDEst1xWJpR5kvxIYMsOdTEZn+pjsmgxbsVzCUT60tAdB04t89/1O/w1cDnyilFU="
+LINE_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # ✅ debug
@@ -29,6 +29,78 @@ print("KEY:", os.getenv("SUPABASE_ANON_KEY"))
 
 app = Flask(__name__)
 
+def extract_og_data(url):
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+        res = requests.get(url, headers=headers, timeout=5)
+        soup = BeautifulSoup(res.text, "html.parser")
+
+        def get_meta(property_name):
+            tag = soup.find("meta", property=property_name)
+            return tag["content"] if tag and tag.get("content") else None
+
+        og_title = get_meta("og:title")
+        og_desc = get_meta("og:description")
+        og_type = get_meta("og:type")
+        og_url = get_meta("og:url")
+
+        if og_title or og_desc:
+            return {
+                "title": og_title,
+                "description": og_desc,
+                "type": og_type,
+                "url": og_url if og_url else url,
+                "source": "og"
+            }
+
+        return None
+
+    except Exception as e:
+        print("OG error:", e)
+        return None
+
+def extract_content(url):
+    # 1️⃣ OG 優先
+    og_data = extract_og_data(url)
+    if og_data:
+        return {
+            "title": og_data["title"],
+            "content": og_data["description"],
+            "type": og_data["type"],
+            "url": og_data["url"],
+            "source": "og"
+        }
+
+    # 2️⃣ fallback：HTML
+    try:
+        res = requests.get(url)
+        soup = BeautifulSoup(res.text, "html.parser")
+
+        title = soup.title.string if soup.title else None
+        paragraphs = soup.find_all("p")
+        content = " ".join([p.get_text() for p in paragraphs[:5]])
+
+        return {
+            "title": title,
+            "content": content,
+            "type": "website",
+            "url": url,
+            "source": "html"
+        }
+
+    except:
+        pass
+
+    # 3️⃣ 最後 fallback
+    return {
+        "title": None,
+        "content": url,
+        "type": "unknown",
+        "url": url,
+        "source": "ai_only"
+    }
 def get_web_content(url):
     try:
         res = requests.get(url, timeout=5)
@@ -50,18 +122,27 @@ from google import genai
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 
-def get_keywords(text):
+def get_keywords(title, content, content_type=""):
     try:
         prompt = f"""
-請從以下內容產生3~5個關鍵字（用逗號分隔）
-要求：
-- 中文
-- 精簡
-- 不要句子
+        請根據以下資訊，產生5個「可搜尋用關鍵字」（用逗號分隔）
 
-內容：
-{text[:1000]}
-"""
+        規則：
+        - 必須是分類詞（例如：房地產、投資、AI工具）
+        - 不要句子
+        - 每個2~6字
+        - 以實用為主
+
+        ---
+        【標題】
+        {title}
+
+        【摘要（高權重）】
+        {content[:1000]}
+
+        【類型】
+        {content_type}
+        """
 
         response = client.models.generate_content(
             model="gemini-3-flash-preview",
@@ -170,22 +251,32 @@ def webhook():
                 url = user_text
 
                 try:
-                    title, content = get_web_content(url)
-                    keywords = get_keywords(content)
+                    title, content, content_type, final_url, 
+                    data = extract_content(url)
 
-                    save_to_supabase(user_id, url, title, keywords)
+                    title = data["title"]
+                    content = data["content"]
+                    content_type = data["type"]
+                    final_url = data["url"]
+                    source = data["source"]
+
+                    keywords = get_keywords(title, content, content_type)
+
+                    save_to_supabase(user_id, final_url, title, keywords)
+
+                    if not title:
+                        title = ""
 
                     reply = f"""已幫你收藏 ✅
 
-🔗 連結：
-{url}
+                    🔗 連結：
+                    {final_url}
+                    📄 標題：
+                    {title}
 
-📄 標題：
-{title}
-
-🏷 關鍵字：
-{keywords}
-"""
+                    🏷 關鍵字：
+                    {keywords}
+                    """
 
                 except Exception as e:
                     print("❌ 分析錯誤:", e)
@@ -210,20 +301,17 @@ def webhook():
 
 def save_to_supabase(user_id, url, title, keywords):
     try:
-        print("🟡 進入 save_to_supabase")
-
         keywords_list = [k.strip() for k in keywords.split(",")]
 
-        data = {
+        res = supabase.table("bookmarks").insert({
             "user_id": user_id,
             "url": url,
             "title": title,
-            "keywords": keywords_list
-        }
-
-        print("📦 準備寫入資料:", data)
-
-        res = supabase.table("bookmarks").insert(data).execute()
+            "keywords": keywords_list,
+            "source_type": "og",
+            "og_title": title,
+            "og_description": ""
+        }).execute()
 
         print("✅ INSERT 成功:", res)
 
