@@ -20,7 +20,7 @@ supabase = create_client(
 )
 
 # ✅ Gemini client（只初始化一次）
-# 修正：模型名稱從 "gemini-3-flash-preview"（不存在）改為 "gemini-2.0-flash"
+# 修正：模型名稱從 "gemini-3-flash-preview"（不存在）改為 "gemini-2.5-flash-lite "
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ✅ debug
