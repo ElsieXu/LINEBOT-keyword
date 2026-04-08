@@ -20,15 +20,28 @@ supabase = create_client(
 )
 
 # ✅ Gemini client（只初始化一次）
-# 修正：模型名稱從 "gemini-3-flash-preview"（不存在）改為 "gemini-2.5-flash-lite "
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-# ✅ debug
+# ⭐️ 新增：將模型名稱獨立成變數，以後要換模型只要改這裡
+MODEL_ID = "gemini-2.5-flash-lite"
+
+# ✅ debug 區塊
 print("🔥 程式啟動了")
 print("LINE TOKEN 是否存在:", bool(LINE_TOKEN))
 print("GEMINI KEY 是否存在:", bool(GEMINI_API_KEY))
 print("SUPABASE URL 是否存在:", bool(os.getenv("SUPABASE_URL")))
 print("SUPABASE KEY 是否存在:", bool(os.getenv("SUPABASE_ANON_KEY")))
+
+# ⭐️ 新增：開機自動測試 Gemini 2.5 連線
+try:
+    print("⏳ 正在測試 Gemini 2.5 連線...")
+    response = client.models.generate_content(
+        model=MODEL_ID,
+        contents="這是一個測試連線，請回覆：『Gemini 2.5 已上線！』"
+    )
+    print(f"✅ Gemini 連線測試成功！回覆內容：{response.text}")
+except Exception as e:
+    print(f"❌ Gemini 啟動失敗，錯誤訊息: {e}")
 
 app = Flask(__name__)
 
