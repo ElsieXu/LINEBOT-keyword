@@ -177,7 +177,7 @@ def get_keywords(title, content, content_type=""):
 {content_type or "無"}"""
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash",  # ✅ 修正：原本 "gemini-3-flash-preview" 不存在
+            model="gemini-2.5-flash-lite",  # ✅ 修正：原本 "gemini-3-flash-preview" 不存在
             contents=prompt
         )
 
