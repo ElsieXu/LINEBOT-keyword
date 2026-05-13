@@ -57,6 +57,8 @@ def get_keywords(title, content, content_type=""):
 
         response = client.chat.completions.create(
             model=MODEL_ID,
+            max_tokens=60,
+            temperature=0.3,
             messages=[
                 {
                     "role": "user",
