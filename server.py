@@ -76,12 +76,16 @@ def fetch_soup(url):
             url,
             headers=HEADERS,
             timeout=10,
-            allow_redirects=True  # 處理短網址、跳轉
+            allow_redirects=True
         )
+
         res.encoding = res.apparent_encoding
+
         soup = BeautifulSoup(res.text, "html.parser")
-        return soup, res.url  # res.url 是最終跳轉後的網址
-    
+
+        return soup, res.url
+
+    except Exception as e:
         print(f"❌ fetch_soup 失敗 ({url}):", e)
         return None, url
 
@@ -180,7 +184,7 @@ def get_keywords(title, content, content_type=""):
 {content_type or "無"}"""
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash",  # 
+            model=MODEL_ID, 
             contents=prompt
         )
 
@@ -199,6 +203,8 @@ def get_keywords(title, content, content_type=""):
 
         import traceback
         traceback.print_exc()
+
+        return "AI暫時無法使用"
 
 # ==============================================================
 # LINE 回覆
