@@ -177,7 +177,7 @@ def get_keywords(title, content, content_type=""):
 {content_type or "無"}"""
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",  # ✅ 修正：原本 "gemini-3-flash-preview" 不存在
+            model="gemini-3.1-flash-lite",  # 
             contents=prompt
         )
 
@@ -275,7 +275,11 @@ def webhook():
                     final_url    = data.get("url") or url
                     source       = data.get("source") or ""
 
-                    keywords = get_keywords(title, content, content_type)
+                    keywords = get_keywords(
+                        title,
+                        content + "\n" + user_text,
+                        content_type
+                    )
 
                     save_to_supabase(user_id, final_url, title, keywords, source)
 
@@ -311,6 +315,12 @@ def webhook():
 
 @app.route("/ping", methods=["GET"])
 def ping():
+    try:
+        supabase.table("bookmarks").select("id").limit(1).execute()
+        print("✅ Supabase ping 成功")
+    except Exception as e:
+        print("❌ Supabase ping 失敗:", e)
+
     print("🏓 ping received")
     return "pong", 200
 
