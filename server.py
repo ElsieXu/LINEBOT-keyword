@@ -32,16 +32,19 @@ print("GEMINI KEY 是否存在:", bool(GEMINI_API_KEY))
 print("SUPABASE URL 是否存在:", bool(os.getenv("SUPABASE_URL")))
 print("SUPABASE KEY 是否存在:", bool(os.getenv("SUPABASE_ANON_KEY")))
 
-# ⭐️ 新增：開機自動測試  2.0 連線
+# ⭐️ 開機測試 Gemini 連線
 try:
-    print("⏳ 正在測試 Gemini 2.0 連線...")
+    print(f"⏳ 正在測試 {MODEL_ID} 連線...")
+
     response = client.models.generate_content(
         model=MODEL_ID,
-        contents="這是一個測試連線，請回覆：『Gemini 2.0 已上線！』"
+        contents="請回覆：Gemini 已成功連線"
     )
-    print(f"✅ Gemini 連線測試成功！回覆內容：{response.text}")
+
+    print(f"✅ Gemini 連線成功：{response.text}")
+
 except Exception as e:
-    print(f"❌ Gemini 啟動失敗，錯誤訊息: {e}")
+    print(f"❌ Gemini 啟動失敗：{e}")
 
 app = Flask(__name__)
 
