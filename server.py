@@ -8,45 +8,78 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from supabase import create_client
-from google import genai
 
 # ✅ 取得環境變數
 LINE_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 supabase = create_client(
     os.getenv("SUPABASE_URL"),
     os.getenv("SUPABASE_ANON_KEY")
 )
 
-# ✅ Gemini client（只初始化一次）
-client = genai.Client(api_key=GEMINI_API_KEY)
+from openai import OpenAI
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# ⭐️ 新增：將模型名稱獨立成變數，以後要換模型只要改這裡
-MODEL_ID = "gemini-2.5-flash"
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=OPENROUTER_API_KEY,
+)
+
+MODEL_ID = "google/gemini-2.5-flash"
+app = Flask(__name__)
 
 # ✅ debug 區塊
 print("🔥 程式啟動了")
 print("LINE TOKEN 是否存在:", bool(LINE_TOKEN))
-print("GEMINI KEY 是否存在:", bool(GEMINI_API_KEY))
+print("OPENROUTER KEY 是否存在:", bool(OPENROUTER_API_KEY))
 print("SUPABASE URL 是否存在:", bool(os.getenv("SUPABASE_URL")))
 print("SUPABASE KEY 是否存在:", bool(os.getenv("SUPABASE_ANON_KEY")))
 
-# ⭐️ 開機測試 Gemini 連線
-try:
-    print(f"⏳ 正在測試 {MODEL_ID} 連線...")
+def get_keywords(title, content, content_type=""):
+    try:
+        prompt = f"""請根據以下資訊，產生5個「可搜尋用關鍵字」（用逗號分隔）
 
-    response = client.models.generate_content(
-        model=MODEL_ID,
-        contents="請回覆：Gemini 已成功連線"
-    )
+規則：
+- 必須是分類詞（例如：房地產、投資、AI工具）
+- 不要句子
+- 每個2~6字
+- 以實用為主
+- 只輸出關鍵字，不要任何說明文字
 
-    print(f"✅ Gemini 連線成功：{response.text}")
+【標題】
+{title or "無"}
 
-except Exception as e:
-    print(f"❌ Gemini 啟動失敗：{e}")
+【摘要（高權重）】
+{(content or "")[:1000]}
 
-app = Flask(__name__)
+【類型】
+{content_type or "無"}"""
+
+        response = client.chat.completions.create(
+            model=MODEL_ID,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        )
+
+        keywords = response.choices[0].message.content.strip()
+
+        print("👉 OpenRouter 回傳:", keywords)
+
+        return keywords
+
+    except Exception as e:
+        print("❌ OpenRouter 錯誤:", e)
+
+        import traceback
+        traceback.print_exc()
+
+        return "AI暫時無法使用"
+
+
 
 # ==============================================================
 # 🔧 強化版 OG 抓取
@@ -159,54 +192,6 @@ def extract_content(url):
 
 
 # ==============================================================
-# 🔧 Gemini 關鍵字生成
-# 修正：模型名稱改為 "gemini-2.0-flash"
-# ==============================================================
-
-def get_keywords(title, content, content_type=""):
-    try:
-        prompt = f"""請根據以下資訊，產生5個「可搜尋用關鍵字」（用逗號分隔）
-
-規則：
-- 必須是分類詞（例如：房地產、投資、AI工具）
-- 不要句子
-- 每個2~6字
-- 以實用為主
-- 只輸出關鍵字，不要任何說明文字
-
-【標題】
-{title or "無"}
-
-【摘要（高權重）】
-{(content or "")[:1000]}
-
-【類型】
-{content_type or "無"}"""
-
-        response = client.models.generate_content(
-            model=MODEL_ID, 
-            contents=prompt
-        )
-
-        print("👉 Gemini 回傳:", response)
-
-        if hasattr(response, "text") and response.text:
-            return response.text.strip()
-
-        if hasattr(response, "candidates"):
-            return response.candidates[0].content.parts[0].text.strip()
-
-        return "無法產生關鍵字"
-
-    except Exception as e:
-        print("❌ Gemini 錯誤:", e)
-
-        import traceback
-        traceback.print_exc()
-
-        return "AI暫時無法使用"
-
-# ==============================================================
 # LINE 回覆
 # ==============================================================
 
@@ -289,7 +274,14 @@ def webhook():
                         content_type
                     )
 
-                    save_to_supabase(user_id, final_url, title, keywords, source)
+                    save_to_supabase(
+                        user_id,
+                        final_url,
+                        title,
+                        content,
+                        keywords,
+                        source
+                    )
 
                     reply = f"已收藏 ✅\n🔗 {final_url}\n📄 {title or '（無標題）'}\n🏷 {keywords}"
 
@@ -337,7 +329,14 @@ def ping():
 # Supabase 操作
 # ==============================================================
 
-def save_to_supabase(user_id, url, title, keywords, source_type="og"):
+def save_to_supabase(
+    user_id,
+    url,
+    title,
+    content,
+    keywords,
+    source_type="og"
+):
     try:
         print("🟡 準備寫入 Supabase")
         keywords_list = [
@@ -354,11 +353,12 @@ def save_to_supabase(user_id, url, title, keywords, source_type="og"):
             "keywords": keywords_list,
             "source_type": source_type,  # ✅ 修正：原本寫死 "og"，現在傳實際來源
             "og_title": title,
-            "og_description": ""
+            "og_description": content[:3000] if content else ""
         }).execute()
 
         print("✅ INSERT 成功:", res)
-
+        print("👉 content 前100字:", content[:100] if content else "無")
+        
     except Exception as e:
         print("❌ INSERT 失敗:", e)
         import traceback
