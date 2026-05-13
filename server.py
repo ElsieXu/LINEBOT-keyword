@@ -23,7 +23,7 @@ supabase = create_client(
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ⭐️ 新增：將模型名稱獨立成變數，以後要換模型只要改這裡
-MODEL_ID = "gemini-2.0-flash"
+MODEL_ID = "gemini-2.5-flash"
 
 # ✅ debug 區塊
 print("🔥 程式啟動了")
