@@ -79,7 +79,7 @@ def get_keywords(title, content, content_type=""):
         import traceback
         traceback.print_exc()
 
-        return "AI暫時無法使用"
+        return ""
 
 
 
@@ -237,15 +237,17 @@ def webhook():
 
             # 🟢 ① /search
             if user_text.startswith("/search"):
-                keyword = user_text.replace("/search", "").strip()
-                results = search_bookmarks(user_id, keyword)
+                keyword = user_text.replace("/search", "", 1).strip()
+                results, err = search_bookmarks(user_id, keyword)
 
-                if not results:
+                if err:
+                    reply = f"查詢失敗 ⚠️\n{err}"
+                elif not results:
                     reply = f"找不到「{keyword}」相關資料 😢"
                 else:
                     reply = f"找到 {len(results)} 筆：\n\n"
                     for i, item in enumerate(results[:5]):
-                        reply += f"{i+1}️⃣ {item['title']}\n🔗 {item['url']}\n\n"
+                        reply += f"{i+1}️⃣ {item.get('title') or '（無標題）'}\n🔗 {item.get('url')}\n\n"
 
                 reply_message(reply_token, reply)
                 continue
@@ -276,7 +278,7 @@ def webhook():
                         content_type
                     )
 
-                    save_to_supabase(
+                    save_err = save_to_supabase(
                         user_id,
                         final_url,
                         title,
@@ -285,7 +287,10 @@ def webhook():
                         source
                     )
 
-                    reply = f"已收藏 ✅\n🔗 {final_url}\n📄 {title or '（無標題）'}\n🏷 {keywords}"
+                    if save_err:
+                        reply = f"儲存失敗 ⚠️\n{save_err}"
+                    else:
+                        reply = f"已收藏 ✅\n🔗 {final_url}\n📄 {title or '（無標題）'}\n🏷 {keywords or '（無關鍵字）'}"
 
                 except Exception as e:
                     print("❌ 分析錯誤:", e)
@@ -360,11 +365,13 @@ def save_to_supabase(
 
         print("✅ INSERT 成功:", res)
         print("👉 content 前100字:", content[:100] if content else "無")
-        
+        return None
+
     except Exception as e:
         print("❌ INSERT 失敗:", e)
         import traceback
         traceback.print_exc()
+        return str(e)[:200]
 
 
 def update_latest_keywords(user_id, new_keywords):
@@ -395,22 +402,32 @@ def update_latest_keywords(user_id, new_keywords):
 
 
 def search_bookmarks(user_id, keyword):
+    """回傳 (results, error)。搜尋 keywords、標題、內文。"""
     try:
         res = supabase.table("bookmarks") \
             .select("*") \
             .eq("user_id", user_id) \
+            .order("created_at", desc=True) \
+            .limit(1000) \
             .execute()
 
+        kw = keyword.lower()
         results = []
-        for item in res.data:
-            if keyword.lower() in ",".join(item["keywords"]).lower():
+        for item in res.data or []:
+            haystack = " ".join([
+                ",".join(item.get("keywords") or []),
+                item.get("title") or "",
+                item.get("og_title") or "",
+                item.get("og_description") or "",
+            ]).lower()
+            if kw in haystack:
                 results.append(item)
 
-        return results
+        return results, None
 
     except Exception as e:
         print("❌ SEARCH ERROR:", e)
-        return []
+        return [], str(e)[:200]
 
 
 # ==============================================================
